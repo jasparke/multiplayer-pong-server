@@ -8,24 +8,30 @@ const http = require("http");
 const server = http.createServer(app);
 const io = require("socket.io")(server);
 
-// app.use(morgan('dev'));
+const redis = require("redis")
+const client = redis.createClient({
+    port: 6379, 
+    host: 'csc462uvic.redis.cache.windows.net',
+    password: '***REMOVED***'
+})
 
+client.on('connect', () => {
+    console.log('connected')
+})
+
+
+/* Express server setup */
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-
-// Static middleware
 app.use(express.static(path.join(__dirname, "..", "public")));
-
 app.get("/*", (req, res, next) => {
     res.sendFile(path.join(__dirname, "..", "index.html"));
 });
-
 app.use((req, res, next) => {
     const err = new Error("Not Found");
     err.status = 404;
     next(err);
 });
-
 app.use((err, req, res, next) => {
     res.status(err.status || 500);
     res.send(err.message || "Internal server error");
@@ -46,6 +52,12 @@ const state = {
     width: 400
 };
 
+gameEnded = (winner, loser) => {
+    console.log("Game over: ", state.players[winner].name, "beat", state.players[loser].name, state.players[winner].score, "to", state.players[loser].score)
+
+    io.sockets.emit("GameOver", {winner: winner})
+}
+
 io.on("connection", socket => {
     console.log("Player Connected", socket.id);
 
@@ -54,20 +66,39 @@ io.on("connection", socket => {
         if (state.p1 && state.players[state.p1].sid == socket.id) {
             delete state.players[state.p1]
             state.p1 = false
+            state.start = false
+            state.ball = {
+                x: 200,
+                y: 50,
+                dx: 0,
+                dy: 3
+            }
         }
         if (state.p2 && state.players[state.p2].sid == socket.id) {
             delete state.players[state.p2]
             state.p2 = false
+            state.start = false
+            state.ball = {
+                x: 200,
+                y: 50,
+                dx: 0,
+                dy: 3
+            }
         }
-        // TODO: Handle forfiet
+        
+        if (!state.p2 && !state.p1) {
+            console.log("Server is ready for new players, get details")
+
+            
+        }
     });
 
-    socket.on("PlayerReady", (id) => {
+    socket.on("PlayerReady", (p) => {
         if (!state.p1) {
-            state.p1 = id
-            state.players[id] = {
+            state.p1 = p.id
+            state.players[p.id] = {
                 sid: socket.id,
-                name: "Player1",
+                name: p.name,
                 x: 175,
                 y: 10,
                 dx: 0,
@@ -76,11 +107,12 @@ io.on("connection", socket => {
                 color: '#FF00FF',
                 score: 0
             }
+            console.log('Player1 Ready!', p.name, "as", p.id)
         } else if (!state.p2) {
-            state.p2 = id
-            state.players[id] = {
+            state.p2 = p.id
+            state.players[p.id] = {
                 sid: socket.id,
-                name: "Player2",
+                name: p.name,
                 x: 175,
                 y: 475,
                 dx: 0,
@@ -89,11 +121,12 @@ io.on("connection", socket => {
                 color: '#00FFFF',
                 score: 0
             }
+            console.log('Player2 Ready!', p.name, "as", p.id)
         }
-        console.log('Player Ready! ', id)
 
-        state.start = state.p1&&state.p2
+        if (state.start = state.p1&&state.p2) console.log('STARTING GAME')
     });
+
     socket.on("PlayerMove", (p) => {
         const player = (p.id == state.p1 || p.id == state.p2) ? state.players[p.id] : false
 
@@ -112,26 +145,11 @@ io.on("connection", socket => {
             } else {
                 player.dx = 0
             }
-
-
         }
     })
-    // socket.on("PlayerMove", (p) => {
-    //     if (p.id == state.p1 || p.id == state.p2) {
-    //         if (p.left) {
-    //             state.players[p.id].x -= 8
-    //             if (state.players[p.id].x < 0) state.players[p.id].x = 0
-    //         }
-    //         if (p.right) {
-    //             state.players[p.id].x += 8
-    //             if (state.players[p.id].x > 350 ) state.players[p.id].x = 350
-    //         }
-    //     }
-    // })
 });
 
-setInterval(() => {
-
+mainLoop = () => {
     if (state.start && state.p1 && state.p2) {
         const b = state.ball;
         const p1 = state.players[state.p1]
@@ -158,6 +176,10 @@ setInterval(() => {
             b.y = state.height - 80
             b.dx = 0
             b.dy = -3
+            console.log("Player 1 Scored: ", p1.score, " : ", p2.score)
+            if (p1.score >= 3) {
+                gameEnded(state.p1, state.p2)
+            }
         }
 
         if (b.y < 0) {
@@ -167,6 +189,10 @@ setInterval(() => {
             b.y = 80
             b.dx = 0
             b.dy = 3
+            console.log("Player 2 Scored: ", p1.score, " : ", p2.score)
+            if (p2.score >= 3) {
+                gameEnded(state.p2, state.p1)
+            }
         }
         if (b.y > state.height/2) {
             if (top_y < (p2.y + p2.height) && bot_y > p2.y && left_x < (p2.x + p2.width) && right_x > p2.x) {
@@ -174,6 +200,7 @@ setInterval(() => {
                 b.dy = -3
                 b.dx += (p2.dx/2)
                 b.y += b.dy
+                console.log("Player 2 hit the ball.")
             }
         } else {
             if (top_y < (p1.y + p1.height) && bot_y > p1.y && left_x < (p1.x + p1.width) && right_x > p1.x) {
@@ -181,14 +208,18 @@ setInterval(() => {
                 b.dy = 3
                 b.dx += (p1.dx/2)
                 b.y += b.dy
+                console.log("Player 1 hit the ball.")
             }
         }
     }
     io.sockets.emit("Update", state);
-}, 1000 / 60);
+}
+
+const gameInterval = setInterval(mainLoop, 1000 / 60);
 
 server.listen(PORT, () => {
-  console.log("Server is live on PORT:", PORT);
+    console.log("Server is live on PORT:", PORT);
+
 });
 
 
