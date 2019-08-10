@@ -7,13 +7,13 @@ const PORT = 4001;
 const http = require("http");
 const server = http.createServer(app);
 const io = require("socket.io")(server);
+const fs = require('fs')
+
+let rawdata = fs.readFileSync('settings.json')
+let redisConn = JSON.parse(rawdata)
 
 const redis = require("redis")
-const client = redis.createClient({
-    port: 6379, 
-    host: 'csc462uvic.redis.cache.windows.net',
-    password: '***REMOVED***'
-})
+const client = redis.createClient(redisConn)
 
 client.on('connect', () => {
     console.log('connected')
@@ -58,6 +58,10 @@ gameEnded = (winner, loser) => {
     io.sockets.emit("GameOver", {winner: winner})
 }
 
+getNewPlayers = () => {
+    client.get
+}
+
 io.on("connection", socket => {
     console.log("Player Connected", socket.id);
 
@@ -89,7 +93,7 @@ io.on("connection", socket => {
         if (!state.p2 && !state.p1) {
             console.log("Server is ready for new players, get details")
 
-            
+            getNewPlayers()
         }
     });
 
@@ -215,11 +219,11 @@ mainLoop = () => {
     io.sockets.emit("Update", state);
 }
 
-const gameInterval = setInterval(mainLoop, 1000 / 60);
+let gameInterval = setInterval(mainLoop, 1000 / 60);
 
 server.listen(PORT, () => {
     console.log("Server is live on PORT:", PORT);
-
+    getNewPlayers()
 });
 
 
