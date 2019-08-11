@@ -44,30 +44,73 @@ const state = {
     width: 400
 };
 
+getNewPlayers = () => {
+
+    let player1 = false
+    let player2 = false
+    const client = redis.createClient(settings)
+
+    const searchZone = ["LFG:1200", "LFG:1100", "LFG:1300", "LFG:1000", "LFG:1400", "LFG:900", "LFG:1500", "LFG:800", "LFG:1600", "LFG:700", "LFG:1700", "LFG:600", "LFG:1800", "LFG:1900", "LFG:2000"]
+    let max = 1
+    console.log('Starting player search...')
+    client.on('connect', () => {
+        client.blpop(searchZone[0], 3, (err, res) => {
+            console.log(err)
+            console.log(res)
+        }) 
+        client.blpop(searchZone[0], 3, (err, res) => {
+            console.log(err)
+            console.log(res)
+        })
+        // while (!player1 || !player2) {
+        //     console.log('still dont have players...')
+        //     for (var i = 0; i < max; i++){
+        //         console.log('searching elo', searchZone[i])
+        //         client.blpop(searchZone[i], 1, (err, res) => {
+        //             player1 = true
+        //             player2 = true
+        //             console.log(res)
+        //             console.log(err)
+        //             if (res != null) {
+        //                 if (!player1) {
+        //                     player1 = res
+        //                     console.log('Player 1 Found.')
+        //                     console.log(res)
+        //                 } else if (!player2) {
+        //                     player2 = res
+        //                     console.log('Player 2 Found.')
+        //                     console.log(res)
+        //                     i = 16 // lol exit the loop
+        //                 }
+        //             }
+        //         })
+        //     }
+        //     max += (max < 15) ? 1 : 0
+        // }
+        client.quit()
+    })
+}
 probability = (score1, score2) => {
     return 1.0 * 1.0 / (1 + 1.0 * Math.pow(10, 1.0 * (score1 - score2) / 400))
 }
 
 gameEnded = (winner, loser) => {
     console.log("Game over: ", state.players[winner].name, "beat", state.players[loser].name, state.players[winner].score, "to", state.players[loser].score)
-    const client = redis.createClient(redisConn)
+    const client = redis.createClient(settings)
 
     let winnerRank = 1200
     let loserRank = 1200
 
     client.on('connect', () => {
-        console.log('connected')
         client.get(winner, (err, reply) => {
-            console.log(reply)
             winnerRank = reply
         })
         client.get(loser, (err, reply) => {
-            console.log(reply)
             loserRank = reply
         })
         const prob = probability(winnerRank, loserRank)
-        winnerRank = winnerOld + 30 * (1 - prob)
-        loserRank = loserOld + 30 * (-1 + prob)
+        winnerRank = winnerRank + 30 * (1 - prob)
+        loserRank = loserRank + 30 * (-1 + prob)
 
         client.set(loser, loserRank)
         client.set(winner, winnerRank)
@@ -239,6 +282,7 @@ let gameInterval = setInterval(mainLoop, 1000 / 60);
 
 server.listen(PORT, () => {
     console.log("Server is live on PORT:", PORT);
+    getNewPlayers()
 });
 
 
