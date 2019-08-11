@@ -8,14 +8,9 @@ const http = require("http");
 const server = http.createServer(app);
 const io = require("socket.io")(server);
 const fs = require('fs')
-
-// let rawdata = fs.readFileSync('settings.json')
-// let redisConn = JSON.parse(rawdata)
-
-// const redis = require("redis")
-
-// const client = redis.createClient(redisConn)
-
+const redis = require('redis')
+const rawdata = fs.readFileSync('settings.json')
+const settings = JSON.parse(rawdata)
 
 /* Express server setup */
 app.use(bodyParser.json());
@@ -49,44 +44,40 @@ const state = {
     width: 400
 };
 
+probability = (score1, score2) => {
+    return 1.0 * 1.0 / (1 + 1.0 * Math.pow(10, 1.0 * (score1 - score2) / 400))
+}
+
 gameEnded = (winner, loser) => {
     console.log("Game over: ", state.players[winner].name, "beat", state.players[loser].name, state.players[winner].score, "to", state.players[loser].score)
+    const client = redis.createClient(redisConn)
+
+    let winnerRank = 1200
+    let loserRank = 1200
+
+    client.on('connect', () => {
+        console.log('connected')
+        client.get(winner, (err, reply) => {
+            console.log(reply)
+            winnerRank = reply
+        })
+        client.get(loser, (err, reply) => {
+            console.log(reply)
+            loserRank = reply
+        })
+        const prob = probability(winnerRank, loserRank)
+        winnerRank = winnerOld + 30 * (1 - prob)
+        loserRank = loserOld + 30 * (-1 + prob)
+
+        client.set(loser, loserRank)
+        client.set(winner, winnerRank)
+        client.quit()
+    })
+    
 
     io.sockets.emit("GameOver", {winner: winner})
 }
 
-// getNewPlayers = () => {
-
-//     let player1 = false
-//     let player2 = false
-
-//     const searchZone = ["LFG:1200", "LFG:1100", "LFG:1300", "LFG:1000", "LFG:1400", "LFG:900", "LFG:1500", "LFG:800", "LFG:1600", "LFG:700", "LFG:1700", "LFG:600", "LFG:1800", "LFG:1900", "LFG:2000"]
-//     let max = 1
-
-//     while (!player1 || !player2) {
-//         for (var i = 0; i < max; i++){
-//             console.log(i, searchZone[i])
-//             client.blpop(searchZone[i], 1, (err, res) => {
-//                 console.log('search3')
-//                 console.log(res)
-//                 console.log(err)
-//                 if (res != null) {
-//                     if (!player1) {
-//                         player1 = res
-//                         console.log('Player 1 Found.')
-//                         console.log(res)
-//                     } else if (!player2) {
-//                         player2 = res
-//                         console.log('Player 2 Found.')
-//                         console.log(res)
-//                         i = 16 // lol exit the loop
-//                     }
-//                 }
-//             })
-//         }
-//         max += (max < 15) ? 1 : 0
-//     }
-// }
 
 io.on("connection", socket => {
     console.log("Player Connected", socket.id);
@@ -118,6 +109,7 @@ io.on("connection", socket => {
         
         if (!state.p2 && !state.p1) {
             console.log("Server is ready for new players")
+            // Need to tell orchestrator that we can be used again.
         }
     });
 
@@ -205,7 +197,7 @@ mainLoop = () => {
             b.dx = 0
             b.dy = -3
             console.log("Player 1 Scored: ", p1.score, " : ", p2.score)
-            if (p1.score >= 3) {
+            if (p1.score >= 1) {
                 gameEnded(state.p1, state.p2)
             }
         }
@@ -218,7 +210,7 @@ mainLoop = () => {
             b.dx = 0
             b.dy = 3
             console.log("Player 2 Scored: ", p1.score, " : ", p2.score)
-            if (p2.score >= 3) {
+            if (p2.score >= 1) {
                 gameEnded(state.p2, state.p1)
             }
         }
@@ -247,10 +239,6 @@ let gameInterval = setInterval(mainLoop, 1000 / 60);
 
 server.listen(PORT, () => {
     console.log("Server is live on PORT:", PORT);
-    client.on('ready', () => {
-        console.log('Redis should be ready...')
-        getNewPlayers()
-    })
 });
 
 
