@@ -9,15 +9,12 @@ const server = http.createServer(app);
 const io = require("socket.io")(server);
 const fs = require('fs')
 
-let rawdata = fs.readFileSync('settings.json')
-let redisConn = JSON.parse(rawdata)
+// let rawdata = fs.readFileSync('settings.json')
+// let redisConn = JSON.parse(rawdata)
 
-const redis = require("redis")
-const client = redis.createClient(redisConn)
+// const redis = require("redis")
 
-client.on('connect', () => {
-    console.log('connected')
-})
+// const client = redis.createClient(redisConn)
 
 
 /* Express server setup */
@@ -58,9 +55,38 @@ gameEnded = (winner, loser) => {
     io.sockets.emit("GameOver", {winner: winner})
 }
 
-getNewPlayers = () => {
-    client.get
-}
+// getNewPlayers = () => {
+
+//     let player1 = false
+//     let player2 = false
+
+//     const searchZone = ["LFG:1200", "LFG:1100", "LFG:1300", "LFG:1000", "LFG:1400", "LFG:900", "LFG:1500", "LFG:800", "LFG:1600", "LFG:700", "LFG:1700", "LFG:600", "LFG:1800", "LFG:1900", "LFG:2000"]
+//     let max = 1
+
+//     while (!player1 || !player2) {
+//         for (var i = 0; i < max; i++){
+//             console.log(i, searchZone[i])
+//             client.blpop(searchZone[i], 1, (err, res) => {
+//                 console.log('search3')
+//                 console.log(res)
+//                 console.log(err)
+//                 if (res != null) {
+//                     if (!player1) {
+//                         player1 = res
+//                         console.log('Player 1 Found.')
+//                         console.log(res)
+//                     } else if (!player2) {
+//                         player2 = res
+//                         console.log('Player 2 Found.')
+//                         console.log(res)
+//                         i = 16 // lol exit the loop
+//                     }
+//                 }
+//             })
+//         }
+//         max += (max < 15) ? 1 : 0
+//     }
+// }
 
 io.on("connection", socket => {
     console.log("Player Connected", socket.id);
@@ -91,9 +117,7 @@ io.on("connection", socket => {
         }
         
         if (!state.p2 && !state.p1) {
-            console.log("Server is ready for new players, get details")
-
-            getNewPlayers()
+            console.log("Server is ready for new players")
         }
     });
 
@@ -223,7 +247,10 @@ let gameInterval = setInterval(mainLoop, 1000 / 60);
 
 server.listen(PORT, () => {
     console.log("Server is live on PORT:", PORT);
-    getNewPlayers()
+    client.on('ready', () => {
+        console.log('Redis should be ready...')
+        getNewPlayers()
+    })
 });
 
 
