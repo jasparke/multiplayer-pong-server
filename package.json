@@ -9,7 +9,7 @@
   "author": "Jason <jason@jasparke.net>",
   "license": "ISC",
   "dependencies": {
-    "express": "^4.17.1",
+    "express": "^4.17.3",
     "redis": "^2.8.0",
     "socket.io": "^2.2.0"
   }
